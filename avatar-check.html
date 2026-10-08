@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avatar Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF0F5;--surface:#FFFFFF;--ink:#1C2333;--muted:#5D667A;--line:#D5DAE4;
+  --accent:#2F5BEA;--accent-ink:#FFFFFF;--check-a:#DDE1EA;--check-b:#F6F7FA;--err:#B42318;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#13161D;--surface:#1D212B;--ink:#E7EAF1;--muted:#99A1B3;--line:#2E3442;
+    --accent:#7C9BFF;--accent-ink:#0F1730;--check-a:#262B36;--check-b:#1B1F28;--err:#FF8A7A;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13161D;--surface:#1D212B;--ink:#E7EAF1;--muted:#99A1B3;--line:#2E3442;
+  --accent:#7C9BFF;--accent-ink:#0F1730;--check-a:#262B36;--check-b:#1B1F28;--err:#FF8A7A;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Noto Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{width:100%;max-width:400px;margin:0 auto}
+.top h1{margin:0;font-size:clamp(2rem,9vw,3.25rem);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.top p{margin:10px 0 0;color:var(--muted);max-width:36ch}
+
+.layout{max-width:1100px;margin:0 auto;padding:20px;display:grid;gap:28px}
+@media (min-width:900px){
+  /* Title sits above the editor so the previews can start at the top of the page */
+  .layout{grid-template-columns:minmax(320px,400px) 1fr;grid-template-rows:auto 1fr;gap:24px 40px;align-items:start}
+  .preview-col{grid-column:2;grid-row:1 / span 2;min-width:0}
+  .editor-col{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px)}
+}
+.view{margin-top:16px}
+
+/* Full-page crop: previews hide and the crop area takes the space they used */
+.layout.focus{max-width:none}
+.layout.focus .preview-col,.layout.focus .top p{display:none}
+.layout.focus .editor-wrap{max-width:none;width:min(100%, calc(100dvh - 190px));min-width:280px}
+@media (min-width:900px){
+  .layout.focus{grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto auto auto 1fr}
+  .layout.focus .top{grid-column:1 / -1;max-width:none;display:flex;align-items:center;gap:24px}
+  .layout.focus .top h1{font-size:2rem}
+  .layout.focus .view{margin:0;flex:0 1 340px}
+  .layout.focus .editor-col{display:contents}
+  .layout.focus .editor-wrap{grid-column:1;grid-row:2}
+  .layout.focus .hint{grid-column:1;grid-row:3}
+  .layout.focus .err{grid-column:1;grid-row:4}
+  .layout.focus .controls{grid-column:2;grid-row:2 / span 3;margin:0;max-width:none;
+    position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px)}
+}
+
+.editor-wrap{width:100%;max-width:400px;margin:0 auto;aspect-ratio:1;overflow:hidden;
+  background:repeating-conic-gradient(var(--check-a) 0 25%,var(--check-b) 0 50%) 0 0/18px 18px;
+  box-shadow:0 0 0 1px var(--line)}
+.editor-wrap.dragging{box-shadow:0 0 0 3px var(--accent)}
+#editor{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#editor:active{cursor:grabbing}
+#editor:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.hint{margin:10px 0 0;text-align:center;color:var(--muted);font-size:.9rem}
+.err{margin:8px 0 0;text-align:center;color:var(--err);font-size:.9rem;font-weight:600}
+
+.controls{max-width:400px;margin:16px auto 0;display:grid;gap:16px}
+.btns{display:flex;gap:10px}
+.btn{flex:1;display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 16px;
+  border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer}
+.btns+.btn{width:100%;margin-top:-6px}
+.seg button:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;flex:1.6}
+.btn:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.field{display:grid;gap:6px}
+.field>span{font-size:.85rem;font-weight:600;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.field output{color:var(--ink);font-variant-numeric:tabular-nums}
+.edit-bar{display:flex;gap:10px;align-items:center}
+.edit-bar .btn{flex:0 1 100px;min-height:40px}
+.edit-bar .check{margin-left:auto}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hist{position:relative;list-style:none;margin:0;padding:0;max-height:168px;overflow:auto;
+  border:1px solid var(--line);background:var(--surface)}
+.hist li+li{border-top:1px solid var(--line)}
+.hist button{width:100%;display:block;padding:8px 12px;border:0;background:none;text-align:left;cursor:pointer;font-size:.85rem}
+.hist button[aria-current="step"]{background:var(--ink);color:var(--bg);font-weight:600}
+.hist .future button{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.field small{color:var(--muted);font-size:.8rem}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+input[type=text]{width:100%;min-height:44px;padding:0 14px;border:1px solid var(--line);background:var(--surface)}
+.seg{display:flex;padding:4px;gap:4px;background:var(--surface);border:1px solid var(--line)}
+.seg button{flex:1;min-height:38px;border:0;background:transparent;font-weight:600;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.swatches{display:flex;gap:10px;align-items:center}
+.sw{width:38px;height:38px;border:1px solid var(--line);cursor:pointer;padding:0;position:relative;flex:none}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.sw-none{background:repeating-conic-gradient(var(--check-a) 0 25%,var(--check-b) 0 50%) 0 0/10px 10px}
+.sw-custom{overflow:hidden}
+.sw-custom input{position:absolute;inset:-8px;width:calc(100% + 16px);height:calc(100% + 16px);border:0;padding:0;cursor:pointer;background:none}
+.tip{margin:0;color:var(--muted);font-size:.85rem}
+
+.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.toolbar .seg{flex:0 1 220px}
+.check{display:inline-flex;gap:8px;align-items:center;font-weight:600;color:var(--muted);cursor:pointer;min-height:44px}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+
+/* Preview stage: simulates the app surface, independent of page theme */
+.stage{--p-bg:#FFFFFF;--p-ink:#000;--p-sub:#8A8A8F;--p-in:#E9E9EB;--p-out:#1F7AF2;--p-card:#F2F2F7;--p-line:#E4E4E8;
+  background:var(--p-bg);color:var(--p-ink);padding:20px 16px 24px;
+  box-shadow:0 0 0 1px var(--line)}
+.stage[data-mode="dark"]{--p-bg:#000;--p-ink:#FFF;--p-sub:#8D8D93;--p-in:#26262A;--p-card:#1C1C1E;--p-line:#2C2C2E}
+.stage h2{font-size:1.15rem;font-weight:600;
+  letter-spacing:-.01em;margin:0 0 14px;color:var(--p-ink)}
+.stage h2:not(:first-child){margin-top:32px}
+.stage.gray img[data-av],.viewer.gray img{filter:grayscale(1)}
+.stage img[data-av]{cursor:zoom-in}
+.stage img[data-av]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Full-screen avatar viewer */
+.viewer{border:0;padding:0;margin:0;width:100vw;height:100dvh;max-width:none;max-height:none;
+  background:rgba(8,10,16,.88);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);color:#FFF}
+.viewer::backdrop{background:transparent}
+.viewer[open]{display:grid;place-items:center;align-content:center;gap:18px;cursor:zoom-out;
+  padding:calc(env(safe-area-inset-top,0px) + 64px) 16px calc(env(safe-area-inset-bottom,0px) + 32px)}
+.viewer img{width:min(80vw,62dvh,512px);height:auto;aspect-ratio:1;object-fit:cover;display:block;
+  background:#1C1C1E;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
+.viewer-cap{text-align:center;cursor:default}
+.viewer-cap b{display:block;font-size:1.25rem}
+.viewer-cap span{color:rgba(255,255,255,.65);font-size:.9rem}
+.viewer-close{position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;min-height:44px;padding:0 18px;
+  border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#FFF;font-weight:600;cursor:pointer}
+@media (prefers-reduced-motion:no-preference){
+  .viewer[open] img{animation:pop .22s cubic-bezier(.2,.8,.3,1)}
+  @keyframes pop{from{transform:scale(.6);opacity:0}}
+}
+
+.av{width:var(--s);height:var(--s);object-fit:cover;flex:none;display:block;background:var(--p-card)}
+.r-circle{border-radius:50%}
+.r-rounded{border-radius:22%}
+/* Each platform's default "no photo" avatar, for the other people in the previews */
+.def{width:var(--s);height:var(--s);border-radius:50%;flex:none;display:block;background:center/cover no-repeat}
+.def-person{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='39' r='17' fill='white'/%3E%3Cpath d='M17 92c2-19 16-28 33-28s31 9 33 28z' fill='white'/%3E%3C/svg%3E")}
+.def-ig{background-color:#C7C7C7}
+.def-x{background-color:#CFD9DE}
+.def-dc{background-color:#5865F2;background-size:62%;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 76'%3E%3Cpath fill='white' fill-rule='evenodd' d='M84.7 6.4A82 82 0 0 0 64.3 0c-.9 1.6-1.9 3.7-2.6 5.4a76 76 0 0 0-23.4 0C37.6 3.7 36.5 1.6 35.6 0A82 82 0 0 0 15.2 6.4C2.3 25.7-1.2 44.5.5 63a83 83 0 0 0 25 12.7c2-2.8 3.8-5.7 5.4-8.8-3-1.1-5.8-2.5-8.5-4.1l2.1-1.7a58.6 58.6 0 0 0 51 0l2.1 1.7c-2.7 1.6-5.5 3-8.5 4.1 1.6 3.1 3.4 6 5.4 8.8a83 83 0 0 0 25-12.7c2-21.5-3.4-40.1-14.5-56.6zM33.4 51.6c-4.9 0-9-4.5-9-10.1s4-10.1 9-10.1 9.1 4.6 9 10.1c0 5.6-4 10.1-9 10.1zm33.2 0c-4.9 0-9-4.5-9-10.1s4-10.1 9-10.1 9.1 4.6 9 10.1c0 5.6-4 10.1-9 10.1z'/%3E%3C/svg%3E")}
+
+.ladder{display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px 20px}
+.ladder figure{margin:0;display:grid;justify-items:center;gap:6px}
+.ladder figcaption{text-align:center;font-size:.72rem;line-height:1.25;color:var(--p-sub);max-width:9ch}
+.ladder figcaption b{display:block;color:var(--p-ink);font-weight:600;font-size:.78rem}
+.ladder[data-shape="circle"] .av{border-radius:50%}
+.ladder[data-shape="rounded"] .av{border-radius:22%}
+.ladder[data-shape="square"] .av{border-radius:0}
+.stage.square .av,.stage.square .def{border-radius:0 !important}
+
+.mocks{display:grid;gap:22px}
+@media (min-width:640px){.mocks{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}}
+.mock-col{display:grid;grid-template-columns:minmax(0,1fr);gap:22px}
+.mock-label{margin:0 0 8px;font-size:.8rem;color:var(--p-sub)}
+.panel{box-shadow:0 0 0 1px var(--p-line);overflow:hidden}
+.ic{width:var(--s);height:var(--s);flex:none;display:block}
+
+/* Instagram */
+.ig{--i-bg:#FFF;--i-ink:#000;--i-sub:#737373;--i-line:#DBDBDB;--i-blue:#0095F6;--i-btn:#EFEFEF;background:var(--i-bg);color:var(--i-ink);font-size:.85rem;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.stage[data-mode="dark"] .ig{--i-bg:#000;--i-ink:#F5F5F5;--i-sub:#A8A8A8;--i-line:#262626;--i-btn:#363636}
+.ig-tray{display:flex;gap:14px;padding:12px 14px;border-bottom:1px solid var(--i-line);overflow:hidden}
+.ig-story{display:grid;justify-items:center;gap:4px;font-size:.7rem;color:var(--i-ink);max-width:64px}
+.ig-story>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ring{padding:2px;border-radius:50%;background:linear-gradient(45deg,#FEDA75,#FA7E1E 30%,#D62976 60%,#962FBF 85%,#4F5BD5)}
+.ring>*{box-shadow:0 0 0 2px var(--i-bg)}
+.ring.seen{background:var(--i-line)}
+.stage.square .ring{border-radius:0}
+.ig-h{margin:0;padding:12px 14px 4px;font-weight:700;font-size:.95rem}
+.ig-row{display:flex;gap:12px;align-items:center;padding:8px 14px}
+.ig-row:last-child{padding-bottom:12px}
+.ig-row p{margin:0;flex:1;min-width:0;line-height:1.3}
+.ig-row .t{color:var(--i-sub)}
+.ig-thumb{width:44px;height:44px;border-radius:4px;flex:none;background:linear-gradient(135deg,#F7B267,#F25C54)}
+.igp-bar{display:flex;align-items:center;gap:18px;padding:12px 14px 6px}
+.igp-bar b{flex:1;display:flex;align-items:center;gap:4px;font-size:1.1rem;font-weight:700}
+.igp-head{display:flex;align-items:center;gap:16px;padding:10px 14px 8px}
+.igp-stats{flex:1;display:flex;justify-content:space-around;gap:8px;text-align:center}
+.igp-stats b{display:block;font-size:1rem;font-weight:700}
+.igp-stats span{display:block;font-size:.75rem}
+.igp-bio{padding:0 14px;font-size:.85rem}
+.igp-btns{display:flex;gap:6px;padding:12px 14px}
+.igp-btns span{flex:1;text-align:center;padding:7px 0;border-radius:8px;background:var(--i-btn);font-weight:600;font-size:.82rem}
+.igp-tabs{display:flex;border-top:1px solid var(--i-line);margin-top:4px}
+.igp-tabs span{flex:1;display:flex;justify-content:center;padding:10px 0;color:var(--i-sub)}
+.igp-tabs span.on{color:var(--i-ink);box-shadow:inset 0 -1px var(--i-ink)}
+.igp-empty{display:grid;justify-items:center;text-align:center;gap:8px;padding:30px 24px 34px}
+.igp-cam{width:62px;height:62px;border-radius:50%;border:2px solid var(--i-ink);display:grid;place-items:center}
+.igp-empty b{font-size:1.4rem;font-weight:800}
+.igp-empty p{margin:0;font-size:.85rem;color:var(--i-ink)}
+.igp-link{color:var(--i-blue);font-weight:600;font-size:.85rem}
+.ig-btn{border-radius:8px;background:var(--i-blue);color:#FFF;font-weight:600;font-size:.8rem;padding:7px 14px;flex:none}
+
+/* Discord */
+.dc{--d-bg:#FFF;--d-ink:#313338;--d-sub:#5C5E66;--d-head:#060607;--d-line:#E3E5E8;--d-hl:rgba(250,168,26,.1);
+  background:var(--d-bg);color:var(--d-ink);font-size:.88rem;
+  font-family:"gg sans","Noto Sans","Helvetica Neue",Helvetica,Arial,sans-serif}
+.stage[data-mode="dark"] .dc{--d-bg:#313338;--d-ink:#DBDEE1;--d-sub:#949BA4;--d-head:#F2F3F5;--d-line:#3F4147;--d-hl:rgba(250,168,26,.08)}
+.dc-ch{padding:10px 14px;font-weight:600;color:var(--d-head);border-bottom:1px solid var(--d-line)}
+.dc-ch span{color:var(--d-sub);margin-right:4px}
+.dc-msg{display:flex;gap:12px;padding:8px 14px}
+.dc-msg.hl{background:var(--d-hl);box-shadow:inset 2px 0 #F0B232}
+.dc-body{flex:1;min-width:0}
+.dc-top{display:flex;gap:8px;align-items:baseline}
+.dc-top b{color:var(--d-head);font-weight:600}
+.dc-top b.c{color:#E67E22}
+.dc-top span{color:var(--d-sub);font-size:.72rem}
+.dc-reply{display:flex;gap:4px;align-items:center;font-size:.78rem;color:var(--d-sub);margin-bottom:2px;white-space:nowrap;overflow:hidden}
+.dc-reply b{color:var(--d-head);font-weight:600;flex:none}
+.dc-at{color:#5865F2;background:rgba(88,101,242,.15);border-radius:3px;padding:0 2px;font-weight:500}
+.dc-toast{display:flex;gap:10px;align-items:center;margin:6px 10px 12px;padding:10px 12px;border-radius:8px;background:#111214;color:#DBDEE1;font-size:.82rem}
+.dc-toast b{color:#F2F3F5;display:block;font-weight:600}
+.dc-toast span{color:#949BA4}
+
+/* X */
+.xn{--x-bg:#FFF;--x-ink:#0F1419;--x-sub:#536471;--x-line:#EFF3F4;background:var(--x-bg);color:var(--x-ink);font-size:.88rem;
+  font-family:TwitterChirp,Chirp,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.stage[data-mode="dark"] .xn{--x-bg:#000;--x-ink:#E7E9EA;--x-sub:#71767B;--x-line:#2F3336}
+.x-tabs{display:flex;border-bottom:1px solid var(--x-line);font-weight:600;font-size:.85rem}
+.x-tabs span{flex:1;text-align:center;padding:10px 0;color:var(--x-sub)}
+.x-tabs span:first-child{color:var(--x-ink);box-shadow:inset 0 -3px #1D9BF0}
+.x-row{display:flex;gap:10px;padding:12px 14px;border-bottom:1px solid var(--x-line)}
+.x-row:last-child{border-bottom:0}
+.x-gut{width:40px;flex:none;display:flex;justify-content:flex-end}
+.x-body{flex:1;min-width:0}
+.x-avs{display:flex;gap:4px;margin-bottom:6px}
+.x-body p{margin:0;line-height:1.3}
+.x-body p.x-q{color:var(--x-sub);margin-top:4px}
+.x-top{display:flex;gap:4px;white-space:nowrap;overflow:hidden}
+.x-top span{color:var(--x-sub);overflow:hidden;text-overflow:ellipsis}
+.x-body p.x-to{color:var(--x-sub);font-size:.82rem}
+.x-to i{font-style:normal;color:#1D9BF0}
+
+/* Phone push */
+.wall{padding:22px 12px;background:linear-gradient(160deg,#5B6CF0,#B57BD8 55%,#F2A07B);
+  font-family:-apple-system,"SF Pro Text",BlinkMacSystemFont,Inter,sans-serif}
+.stage[data-mode="dark"] .wall{background:linear-gradient(160deg,#1C2350,#4A2D63 55%,#6B3A2E)}
+.notif{display:flex;gap:10px;align-items:center;padding:11px 12px;border-radius:20px;
+  background:rgba(255,255,255,.72);color:#000;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.notif+.notif{margin-top:8px}
+.stage[data-mode="dark"] .notif{background:rgba(30,30,32,.72);color:#fff}
+.badged{position:relative;flex:none}
+.badged .app{position:absolute;right:-3px;bottom:-3px;width:18px;height:18px;border-radius:5px;box-shadow:0 0 0 1.5px rgba(255,255,255,.9)}
+.app.ig-app{background:linear-gradient(45deg,#FEDA75,#FA7E1E 30%,#D62976 60%,#962FBF 85%,#4F5BD5)}
+.app.dc-app{background:#5865F2}
+.app.x-app{background:#000}
+.n-body{flex:1;min-width:0}
+.n-top{display:flex;justify-content:space-between;gap:8px;font-size:.85rem}
+.n-top span{opacity:.6;font-size:.75rem}
+.n-text{font-size:.85rem;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<main class="layout">
+  <header class="top">
+    <h1>Avatar Check</h1>
+    <p>See your profile picture at real sizes and inside the places people will actually see it.</p>
+    <div class="seg view" id="view" role="group" aria-label="View">
+      <button type="button" data-v="preview">Previews</button>
+      <button type="button" data-v="crop">Full-Page Crop</button>
+    </div>
+  </header>
+
+  <section class="editor-col" aria-label="Crop your image">
+    <div class="editor-wrap" id="drop">
+      <canvas id="editor" tabindex="0" aria-label="Crop area. Drag to reposition, pinch or scroll to zoom."></canvas>
+    </div>
+    <p class="hint" id="hint">This is a sample. Choose a photo to try your own.</p>
+    <p class="err" id="err" hidden></p>
+
+    <div class="controls">
+      <div class="edit-bar">
+        <button class="btn" id="undo" type="button" disabled>Undo</button>
+        <button class="btn" id="redo" type="button" disabled>Redo</button>
+        <label class="check"><input type="checkbox" id="grid"> Grid</label>
+      </div>
+
+      <div class="btns">
+        <label class="btn primary">Choose Image<input type="file" id="file" accept="image/*" hidden></label>
+        <button class="btn" id="reset" type="button">Recenter</button>
+      </div>
+      <button class="btn" id="save" type="button">Save Cropped Image</button>
+
+      <label class="field"><span>Zoom <output id="zoomVal">1.00×</output></span>
+        <input type="range" id="zoom" min="1" max="6" step="0.01" value="1">
+      </label>
+
+      <div class="field"><span>History</span>
+        <ol class="hist" id="hist" aria-label="Crop history"></ol>
+      </div>
+
+      <div class="field"><span>Shape for the Size Ladder</span>
+        <div class="seg" id="shape" role="group" aria-label="Shape">
+          <button type="button" data-v="circle">Circle</button>
+          <button type="button" data-v="rounded">Rounded</button>
+          <button type="button" data-v="square">Square</button>
+        </div>
+      </div>
+
+      <div class="field"><span>Background</span>
+        <div class="swatches" id="fill" role="group" aria-label="Background fill">
+          <button type="button" class="sw sw-none" data-v="none" aria-label="Transparent"></button>
+          <button type="button" class="sw" data-v="#FFFFFF" style="background:#FFFFFF" aria-label="White"></button>
+          <button type="button" class="sw" data-v="#000000" style="background:#000000" aria-label="Black"></button>
+          <label class="sw sw-custom" id="customWrap" aria-label="Custom Colour"><input type="color" id="custom" value="#2F5BEA"></label>
+        </div>
+        <small>Fills in behind transparent PNGs.</small>
+      </div>
+
+      <label class="field"><span>Display Name</span>
+        <input type="text" id="name" maxlength="40" autocomplete="name">
+      </label>
+
+      <p class="tip">On a laptop you can also drop an image on the crop area or paste one with Cmd/Ctrl + V.
+        Click the crop area, then use the arrow keys to nudge (hold Shift for bigger steps) and + / − to fine-tune zoom.
+        Cmd/Ctrl + Z undoes, Cmd/Ctrl + Shift + Z redoes.</p>
+    </div>
+  </section>
+
+  <section class="preview-col" aria-label="Previews">
+    <div class="toolbar">
+      <div class="seg" id="mode" role="group" aria-label="Preview appearance">
+        <button type="button" data-v="light">Light</button>
+        <button type="button" data-v="dark">Dark</button>
+      </div>
+      <label class="check"><input type="checkbox" id="gray"> Grayscale</label>
+      <label class="check"><input type="checkbox" id="square"> Square Avatars</label>
+    </div>
+
+    <div class="stage" id="stage" data-mode="light">
+      <h2>In Apps</h2>
+      <div class="mocks">
+       <div class="mock-col">
+        <div>
+          <p class="mock-label">Instagram Activity</p>
+          <div class="panel ig">
+            <div class="ig-tray">
+              <div class="ig-story"><div class="ring"><img data-av class="av r-circle" style="--s:56px" alt=""></div><span data-handle></span></div>
+              <div class="ig-story"><div class="ring"><span class="def def-person def-ig" style="--s:56px" role="img" aria-label="John Doe"></span></div><span>johndoe</span></div>
+              <div class="ig-story"><div class="ring seen"><span class="def def-person def-ig" style="--s:56px" role="img" aria-label="Jane Doe"></span></div><span>janedoe</span></div>
+            </div>
+            <p class="ig-h">Today</p>
+            <div class="ig-row">
+              <img data-av class="av r-circle" style="--s:44px" alt="">
+              <p><b data-handle></b> liked your photo. <span class="t">2h</span></p>
+              <span class="ig-thumb"></span>
+            </div>
+            <div class="ig-row">
+              <img data-av class="av r-circle" style="--s:44px" alt="">
+              <p><b data-handle></b> started following you. <span class="t">5h</span></p>
+              <span class="ig-btn">Follow</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="mock-label">Instagram Profile</p>
+          <div class="panel ig">
+            <div class="igp-bar">
+              <b><span data-handle></span> <svg class="ic" style="--s:14px" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></b>
+              <svg class="ic" style="--s:24px" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <svg class="ic" style="--s:24px" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <div class="igp-head">
+              <img data-av class="av r-circle" style="--s:86px" alt="">
+              <div class="igp-stats">
+                <div><b>0</b><span>posts</span></div>
+                <div><b>128</b><span>followers</span></div>
+                <div><b>96</b><span>following</span></div>
+              </div>
+            </div>
+            <div class="igp-bio"><b data-name></b></div>
+            <div class="igp-btns"><span>Edit profile</span><span>Share profile</span></div>
+            <div class="igp-tabs">
+              <span class="on"><svg class="ic" style="--s:22px" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18" stroke="currentColor" stroke-width="1.8"/></svg></span>
+              <span><svg class="ic" style="--s:22px" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 8.5h18M9 3l3 5.5M14.5 3l3 5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 12v5l4.5-2.5z" fill="currentColor"/></svg></span>
+              <span><svg class="ic" style="--s:22px" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 19c1-3 3-4 5.5-4s4.5 1 5.5 4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+            </div>
+            <div class="igp-empty">
+              <span class="igp-cam"><svg class="ic" style="--s:34px" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span>
+              <b>Share Photos</b>
+              <p>When you share photos, they will appear on your profile.</p>
+              <span class="igp-link">Share your first photo</span>
+            </div>
+          </div>
+        </div>
+       </div>
+
+       <div class="mock-col">
+        <div>
+          <p class="mock-label">Discord</p>
+          <div class="panel dc">
+            <div class="dc-ch"><span>#</span>general</div>
+            <div class="dc-msg">
+              <img data-av class="av r-circle" style="--s:40px" alt="">
+              <div class="dc-body">
+                <div class="dc-top"><b class="c" data-name></b><span>Today at 10:42 AM</span></div>
+                <div>anyone up for ranked tonight?</div>
+              </div>
+            </div>
+            <div class="dc-msg hl">
+              <span class="def def-dc" style="--s:40px" role="img" aria-label="John Doe"></span>
+              <div class="dc-body">
+                <div class="dc-reply"><img data-av class="av r-circle" style="--s:16px" alt=""><b data-name></b> anyone up for ranked tonight?</div>
+                <div class="dc-top"><b>John Doe</b><span>Today at 10:44 AM</span></div>
+                <div><span class="dc-at">@<span data-name></span></span> I'm in after 8</div>
+              </div>
+            </div>
+            <div class="dc-toast">
+              <img data-av class="av r-circle" style="--s:32px" alt="">
+              <div><b data-name></b><span>#general · sent an attachment</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="mock-label">X</p>
+          <div class="panel xn">
+            <div class="x-tabs"><span>All</span><span>Verified</span><span>Mentions</span></div>
+            <div class="x-row">
+              <div class="x-gut"><svg class="ic" style="--s:26px" viewBox="0 0 24 24" aria-hidden="true"><path fill="#F91880" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 2.9 4.5 6.6 4.5c2.1 0 3.6 1.1 4.4 2.5.8-1.4 2.3-2.5 4.4-2.5 3.7 0 5.7 3.9 4.2 7.3C19.5 16.4 12 21 12 21z"/></svg></div>
+              <div class="x-body">
+                <div class="x-avs"><img data-av class="av r-circle" style="--s:32px" alt=""><span class="def def-person def-x" style="--s:32px" role="img" aria-label="Jane Doe"></span></div>
+                <p><b data-name></b> and Jane Doe liked your post</p>
+                <p class="x-q">shipping the new homepage today 🚀</p>
+              </div>
+            </div>
+            <div class="x-row">
+              <img data-av class="av r-circle" style="--s:40px" alt="">
+              <div class="x-body">
+                <div class="x-top"><b data-name></b><span>@<span data-handle></span> · 2h</span></div>
+                <p class="x-to">Replying to <i>@you</i></p>
+                <p>this looks so clean, congrats on the launch</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="mock-label">Phone Notifications</p>
+          <div class="panel wall">
+            <div class="notif">
+              <span class="badged"><img data-av class="av r-circle" style="--s:40px" alt=""><span class="app ig-app"></span></span>
+              <div class="n-body">
+                <div class="n-top"><strong data-handle></strong><span>now</span></div>
+                <div class="n-text">Sent you a reel</div>
+              </div>
+            </div>
+            <div class="notif">
+              <span class="badged"><img data-av class="av r-circle" style="--s:40px" alt=""><span class="app dc-app"></span></span>
+              <div class="n-body">
+                <div class="n-top"><strong data-name></strong><span>2m ago</span></div>
+                <div class="n-text">#general: anyone up for ranked tonight?</div>
+              </div>
+            </div>
+            <div class="notif">
+              <span class="badged"><img data-av class="av r-circle" style="--s:40px" alt=""><span class="app x-app"></span></span>
+              <div class="n-body">
+                <div class="n-top"><strong data-name></strong><span>1h ago</span></div>
+                <div class="n-text">Replied to your post</div>
+              </div>
+            </div>
+          </div>
+        </div>
+       </div>
+      </div>
+
+      <h2>Real Sizes</h2>
+      <div class="ladder" id="ladder" data-shape="circle"></div>
+    </div>
+  </section>
+</main>
+
+<dialog class="viewer" id="viewer" aria-label="Profile picture">
+  <button class="viewer-close" id="viewerClose" type="button">Close</button>
+  <img data-av alt="Your profile picture, enlarged">
+  <div class="viewer-cap"><b data-name></b><span id="viewerSize"></span></div>
+</dialog>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const ed = $('#editor'), ctx = ed.getContext('2d');
+  const out = document.createElement('canvas'); out.width = out.height = 512;
+  const octx = out.getContext('2d');
+  const MARGIN = 0.08; // editor frame inset, so you can see what's cropped away
+  const KEY_IMG = 'avatar-check:img', KEY_PREFS = 'avatar-check:prefs';
+
+  const st = { img:null, w:0, h:0, z:1, px:0, py:0, shape:'circle', fill:'none', custom:'#2F5BEA',
+               name:'Branden', mode:'light', gray:false, square:false, grid:false, view:'preview' };
+
+  const SIZES = [[16,'Browser tab'],[20,'Mentions'],[24,'Reactions'],[32,'Comments'],
+                 [40,'Chat headers'],[48,'Notifications'],[64,'Contact cards'],[96,'Profile header'],[160,'Profile page']];
+  $('#ladder').innerHTML = SIZES.map(([s,l]) =>
+    `<figure><img data-av class="av" style="--s:${s}px" alt=""><figcaption><b>${s}px</b>${l}</figcaption></figure>`).join('');
+
+  // ---------- drawing ----------
+  function clampPos(){
+    if (!st.img) return;
+    const half = Math.min(st.w, st.h) / (2 * st.z);
+    st.px = Math.min(Math.max(st.px, half), st.w - half);
+    st.py = Math.min(Math.max(st.py, half), st.h - half);
+  }
+  function fillColor(){ return st.fill === 'custom' ? st.custom : st.fill; }
+  function drawImg(c, S, F){
+    const f = fillColor();
+    if (f !== 'none'){ c.fillStyle = f; c.fillRect(0,0,S,S); }
+    if (!st.img) return;
+    const k = F / Math.min(st.w, st.h) * st.z;
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(st.img, S/2 - st.px*k, S/2 - st.py*k, st.w*k, st.h*k);
+  }
+  function shapePath(c, x, y, s, shape){
+    if (shape === 'circle'){ c.moveTo(x+s, y+s/2); c.arc(x+s/2, y+s/2, s/2, 0, Math.PI*2); }
+    else if (shape === 'rounded'){
+      const r = s * .22;
+      c.moveTo(x+r, y); c.arcTo(x+s, y, x+s, y+s, r); c.arcTo(x+s, y+s, x, y+s, r);
+      c.arcTo(x, y+s, x, y, r); c.arcTo(x, y, x+s, y, r); c.closePath();
+    } else c.rect(x, y, s, s);
+  }
+  function drawEditor(){
+    const S = ed.width; if (!S) return;
+    ctx.clearRect(0,0,S,S);
+    const m = S * MARGIN, F = S - 2*m;
+    drawImg(ctx, S, F);
+    const shape = st.square ? 'square' : st.shape;
+    ctx.beginPath(); ctx.rect(0,0,S,S); shapePath(ctx, m, m, F, shape);
+    ctx.fillStyle = 'rgba(12,16,28,.58)'; ctx.fill('evenodd');
+    if (st.grid) drawGrid(m, F, shape);
+    ctx.beginPath(); shapePath(ctx, m, m, F, shape);
+    ctx.lineWidth = Math.max(1.5, S/260); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
+  }
+  // Rule-of-thirds lines plus dashed centre lines, clipped to the crop shape
+  function drawGrid(m, F, shape){
+    const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    ctx.save();
+    ctx.beginPath(); shapePath(ctx, m, m, F, shape); ctx.clip();
+    ctx.lineWidth = Math.max(1, ed.width/400);
+    ctx.strokeStyle = 'rgba(255,255,255,.6)';
+    for (const t of [1/3, 2/3]){ line(m + F*t, m, m + F*t, m + F); line(m, m + F*t, m + F, m + F*t); }
+    ctx.setLineDash([ctx.lineWidth * 4, ctx.lineWidth * 4]);
+    ctx.strokeStyle = 'rgba(255,255,255,.4)';
+    line(m + F/2, m, m + F/2, m + F); line(m, m + F/2, m + F, m + F/2);
+    ctx.restore();
+  }
+
+  let curUrl = null, busy = false, dirty = false, raf = 0;
+  function renderOut(){
+    if (busy){ dirty = true; return; }
+    busy = true;
+    octx.clearRect(0,0,512,512);
+    drawImg(octx, 512, 512);
+    out.toBlob(b => {
+      busy = false;
+      if (b){
+        const u = URL.createObjectURL(b);
+        $$('img[data-av]').forEach(i => i.src = u);
+        if (curUrl) setTimeout((old => () => URL.revokeObjectURL(old))(curUrl), 500);
+        curUrl = u;
+      }
+      if (dirty){ dirty = false; renderOut(); }
+    }, 'image/png');
+  }
+  function update(){
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => { drawEditor(); renderOut(); });
+    savePrefs();
+  }
+
+  new ResizeObserver(() => {
+    const px = Math.round(ed.clientWidth * (window.devicePixelRatio || 1));
+    if (px && ed.width !== px){ ed.width = ed.height = px; drawEditor(); }
+  }).observe(ed);
+
+  // ---------- persistence (this browser only) ----------
+  let saveT = 0;
+  function savePrefs(){
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      try {
+        localStorage.setItem(KEY_PREFS, JSON.stringify({
+          z:st.z, fx: st.w ? st.px/st.w : .5, fy: st.h ? st.py/st.h : .5,
+          shape:st.shape, fill:st.fill, custom:st.custom, name:st.name, mode:st.mode, gray:st.gray, square:st.square, grid:st.grid, view:st.view }));
+      } catch(e){}
+    }, 300);
+  }
+  function persistImage(im){
+    try {
+      const max = 1024, r = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.naturalWidth*r); c.height = Math.round(im.naturalHeight*r);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      try { localStorage.setItem(KEY_IMG, c.toDataURL('image/png')); }
+      catch(e){ localStorage.setItem(KEY_IMG, c.toDataURL('image/jpeg', .88)); }
+    } catch(e){}
+  }
+
+  // ---------- loading ----------
+  function showErr(msg){ const e = $('#err'); e.textContent = msg; e.hidden = !msg; }
+  function loadSrc(src, opts = {}){
+    const im = new Image();
+    im.onload = () => {
+      st.img = im; st.w = im.naturalWidth; st.h = im.naturalHeight;
+      if (opts.fx != null){ st.px = opts.fx*st.w; st.py = opts.fy*st.h; }
+      else { st.z = 1; st.px = st.w/2; st.py = st.h/2; }
+      clampPos(); syncZoom();
+      if (opts.persist) persistImage(im);
+      if (opts.user) $('#hint').textContent = 'Drag to reposition. Pinch or scroll to zoom.';
+      showErr('');
+      resetHist(opts.user ? 'New Image' : 'Start');
+      update();
+    };
+    im.onerror = () => showErr("That file couldn't be opened. Try a JPG, PNG or WebP.");
+    im.src = src;
+  }
+  function useFile(f){
+    if (!f) return;
+    if (f.type && !f.type.startsWith('image/')) return showErr('That file isn’t an image. Choose a JPG, PNG or WebP.');
+    loadSrc(URL.createObjectURL(f), { persist:true, user:true });
+  }
+  function sample(){
+    const c = document.createElement('canvas'); c.width = c.height = 800;
+    const g = c.getContext('2d');
+    const sky = g.createLinearGradient(0,0,0,800);
+    sky.addColorStop(0,'#7FB3FF'); sky.addColorStop(1,'#FFD3A3');
+    g.fillStyle = sky; g.fillRect(0,0,800,800);
+    g.fillStyle = '#FFF3D1'; g.beginPath(); g.arc(520,300,120,0,Math.PI*2); g.fill();
+    g.fillStyle = '#3D5A80'; g.beginPath();
+    g.moveTo(0,620); g.lineTo(260,380); g.lineTo(470,600); g.lineTo(640,450); g.lineTo(800,590); g.lineTo(800,800); g.lineTo(0,800); g.fill();
+    g.fillStyle = '#22324A'; g.beginPath();
+    g.moveTo(0,720); g.quadraticCurveTo(400,600,800,700); g.lineTo(800,800); g.lineTo(0,800); g.fill();
+    return c.toDataURL('image/png');
+  }
+
+  // ---------- gestures ----------
+  const pts = new Map(); let pinch0 = null;
+  const dist = () => { const [a,b] = [...pts.values()]; return Math.hypot(a.x-b.x, a.y-b.y) || 1; };
+  function setZoom(z){ st.z = Math.min(6, Math.max(1, z)); syncZoom(); clampPos(); update(); }
+  function syncZoom(){ $('#zoom').value = st.z; $('#zoomVal').textContent = st.z.toFixed(2) + '×'; }
+  const zoomLabel = () => `Zoom ${st.z.toFixed(2)}×`;
+  const scale = () => ed.clientWidth * (1 - 2*MARGIN) / Math.min(st.w, st.h) * st.z; // screen px per source px
+  let gesture = null;
+  ed.addEventListener('pointerdown', e => {
+    ed.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pts.size === 2) pinch0 = { d:dist(), z:st.z };
+  });
+  ed.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId) || !st.img) return;
+    const prev = pts.get(e.pointerId), cur = {x:e.clientX, y:e.clientY};
+    pts.set(e.pointerId, cur);
+    if (pts.size === 1){
+      const k = scale();
+      st.px -= (cur.x - prev.x) / k; st.py -= (cur.y - prev.y) / k;
+      gesture ||= 'move';
+      clampPos(); update();
+    } else if (pts.size === 2 && pinch0){
+      gesture = 'zoom';
+      setZoom(pinch0.z * dist() / pinch0.d);
+    }
+  });
+  const end = e => {
+    pts.delete(e.pointerId); if (pts.size < 2) pinch0 = null;
+    if (!pts.size && gesture){ record(gesture === 'zoom' ? zoomLabel() : 'Move'); gesture = null; }
+  };
+  ed.addEventListener('pointerup', end); ed.addEventListener('pointercancel', end);
+
+  // Wheel and key presses come in bursts, so they're saved as one history step once they settle
+  let settleT = 0;
+  const recordSoon = label => { clearTimeout(settleT); settleT = setTimeout(() => record(label()), 400); };
+  ed.addEventListener('wheel', e => {
+    e.preventDefault(); setZoom(st.z * Math.exp(-e.deltaY * 0.002)); recordSoon(zoomLabel);
+  }, {passive:false});
+  ed.addEventListener('keydown', e => {
+    if (!st.img || e.ctrlKey || e.metaKey || e.altKey) return;
+    const step = (e.shiftKey ? 10 : 1) / scale();
+    const moves = { ArrowLeft:[1,0], ArrowRight:[-1,0], ArrowUp:[0,1], ArrowDown:[0,-1] };
+    if (moves[e.key]){
+      e.preventDefault();
+      st.px += moves[e.key][0] * step; st.py += moves[e.key][1] * step;
+      clampPos(); update(); recordSoon(() => 'Nudge');
+    } else if (['Equal','NumpadAdd','Minus','NumpadSubtract'].includes(e.code)){
+      // Matched by key position: on most layouts "+" already needs Shift, so Shift can't mean "bigger step" here
+      e.preventDefault();
+      const zin = e.code === 'Equal' || e.code === 'NumpadAdd';
+      setZoom(zin ? st.z * 1.01 : st.z / 1.01); recordSoon(zoomLabel);
+    }
+  });
+
+  const drop = $('#drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragging'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('dragging'); useFile(e.dataTransfer.files[0]); });
+  window.addEventListener('paste', e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (item) useFile(item.getAsFile());
+  });
+
+  // ---------- controls ----------
+  $('#file').addEventListener('change', e => { useFile(e.target.files[0]); e.target.value = ''; });
+  $('#zoom').addEventListener('input', e => setZoom(+e.target.value));
+  $('#zoom').addEventListener('change', () => record(zoomLabel()));
+  $('#reset').addEventListener('click', () => {
+    if (!st.img) return;
+    st.z = 1; st.px = st.w/2; st.py = st.h/2; syncZoom(); update(); record('Recenter');
+  });
+
+  function syncSeg(id, val){ $$(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', b.dataset.v === val)); }
+  $('#shape').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    st.shape = b.dataset.v; syncSeg('shape', st.shape); $('#ladder').dataset.shape = st.shape; update();
+    record(`Shape: ${b.textContent}`);
+  });
+  function syncFill(){
+    $$('#fill .sw').forEach(b => b.setAttribute('aria-pressed',
+      b.id === 'customWrap' ? st.fill === 'custom' : b.dataset.v === st.fill));
+    $('#customWrap').style.background = st.custom;
+  }
+  $('#fill').addEventListener('click', e => {
+    const b = e.target.closest('button.sw'); if (!b) return;
+    st.fill = b.dataset.v; syncFill(); update();
+    record(`Background: ${b.getAttribute('aria-label')}`);
+  });
+  $('#custom').addEventListener('input', e => { st.custom = e.target.value; st.fill = 'custom'; syncFill(); update(); });
+  $('#custom').addEventListener('change', () => record(`Background: ${st.custom.toUpperCase()}`));
+
+  function syncName(){
+    $$('[data-name]').forEach(n => n.textContent = st.name.trim() || 'You');
+    const handle = st.name.toLowerCase().replace(/[^a-z0-9_.]/g, '') || 'you';
+    $$('[data-handle]').forEach(n => n.textContent = handle);
+  }
+  $('#name').addEventListener('input', e => { st.name = e.target.value; syncName(); savePrefs(); });
+
+  $('#mode').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    st.mode = b.dataset.v; syncSeg('mode', st.mode); $('#stage').dataset.mode = st.mode; savePrefs();
+  });
+  // The canvas redraws at its new size on its own via the ResizeObserver
+  function syncView(){ syncSeg('view', st.view); $('.layout').classList.toggle('focus', st.view === 'crop'); }
+  $('#view').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === st.view) return;
+    st.view = b.dataset.v; syncView(); savePrefs(); window.scrollTo(0, 0);
+  });
+  $('#gray').addEventListener('change', e => { st.gray = e.target.checked; $('#stage').classList.toggle('gray', st.gray); savePrefs(); });
+
+  // ---------- full-screen viewer ----------
+  // Opens from any of your avatars in the previews, keeping the shape it had where you clicked it
+  const viewer = $('#viewer'), vImg = viewer.querySelector('img');
+  $$('#stage img[data-av]').forEach(i => { i.tabIndex = 0; i.setAttribute('role', 'button'); i.setAttribute('aria-label', 'View profile picture full screen'); });
+  function openViewer(from){
+    const radius = getComputedStyle(from).borderRadius;
+    vImg.style.borderRadius = radius.endsWith('%') ? radius : (parseFloat(radius) / from.offsetWidth * 100) + '%';
+    viewer.classList.toggle('gray', st.gray);
+    $('#viewerSize').textContent = `Opened from the ${from.offsetWidth}px preview`;
+    viewer.showModal();
+  }
+  $('#stage').addEventListener('click', e => { const i = e.target.closest('img[data-av]'); if (i) openViewer(i); });
+  $('#stage').addEventListener('keydown', e => {
+    const i = e.target.closest('img[data-av]');
+    if (i && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); openViewer(i); }
+  });
+  // Clicking anywhere except the picture and caption closes it, like a photo viewer
+  viewer.addEventListener('click', e => { if (e.target === viewer || e.target.id === 'viewerClose') viewer.close(); });
+
+  function syncSquare(){
+    $('#stage').classList.toggle('square', st.square);
+    $('#ladder').dataset.shape = st.square ? 'square' : st.shape;
+    $$('#shape button').forEach(b => b.disabled = st.square);
+  }
+  $('#square').addEventListener('change', e => {
+    st.square = e.target.checked; syncSquare(); update();
+    record(st.square ? 'Square Avatars On' : 'Square Avatars Off');
+  });
+  $('#grid').addEventListener('change', e => { st.grid = e.target.checked; drawEditor(); savePrefs(); });
+
+  // ---------- history ----------
+  // Each step snapshots everything that changes the cropped image; a new image starts a fresh history
+  const hist = { list:[], i:-1 }, HIST_MAX = 60;
+  const snap = () => ({ z:st.z, px:st.px, py:st.py, shape:st.shape, fill:st.fill, custom:st.custom, square:st.square });
+  const same = (a, b) => Object.keys(a).every(k => a[k] === b[k]);
+  function record(label){
+    const s = snap(), cur = hist.list[hist.i];
+    if (cur && same(cur.s, s)) return;
+    hist.list.splice(hist.i + 1);
+    hist.list.push({ label, s });
+    if (hist.list.length > HIST_MAX) hist.list.shift();
+    hist.i = hist.list.length - 1;
+    renderHist();
+  }
+  function resetHist(label){ hist.list = []; hist.i = -1; record(label); }
+  function goTo(i){
+    if (i < 0 || i >= hist.list.length || i === hist.i) return;
+    clearTimeout(settleT);
+    hist.i = i; Object.assign(st, hist.list[i].s);
+    syncZoom(); syncSeg('shape', st.shape); $('#custom').value = st.custom; syncFill();
+    $('#square').checked = st.square; syncSquare();
+    update(); renderHist();
+  }
+  function renderHist(){
+    const L = $('#hist');
+    L.innerHTML = hist.list.map((h, i) =>
+      `<li${i > hist.i ? ' class="future"' : ''}><button type="button" data-i="${i}"${i === hist.i ? ' aria-current="step"' : ''}>${i + 1}. ${h.label}</button></li>`).join('');
+    $('#undo').disabled = hist.i <= 0;
+    $('#redo').disabled = hist.i >= hist.list.length - 1;
+    const cur = L.querySelector('[aria-current]');
+    if (cur) L.scrollTop = cur.parentElement.offsetTop - L.clientHeight / 2;
+  }
+  $('#hist').addEventListener('click', e => { const b = e.target.closest('button'); if (b) goTo(+b.dataset.i); });
+  $('#undo').addEventListener('click', () => goTo(hist.i - 1));
+  $('#redo').addEventListener('click', () => goTo(hist.i + 1));
+  window.addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target.matches('input[type=text]')) return;
+    const k = e.key.toLowerCase();
+    if (k === 'z'){ e.preventDefault(); goTo(e.shiftKey ? hist.i + 1 : hist.i - 1); }
+    else if (k === 'y'){ e.preventDefault(); goTo(hist.i + 1); }
+  });
+
+  // Export the crop at the source image's own resolution (capped), not the 512px preview
+  $('#save').addEventListener('click', () => {
+    if (!st.img) return;
+    const size = Math.max(256, Math.min(2048, Math.round(Math.min(st.w, st.h) / st.z)));
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    drawImg(c.getContext('2d'), size, size);
+    c.toBlob(b => {
+      if (!b) return showErr("Couldn't save the image. Try again.");
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = `avatar-${size}px.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }, 'image/png');
+  });
+
+  // ---------- init ----------
+  let prefs = null, savedImg = null;
+  try { prefs = JSON.parse(localStorage.getItem(KEY_PREFS) || 'null'); savedImg = localStorage.getItem(KEY_IMG); } catch(e){}
+  if (prefs) Object.assign(st, {
+    z: prefs.z || 1, shape: prefs.shape || 'circle', fill: prefs.fill || 'none', custom: prefs.custom || st.custom,
+    name: typeof prefs.name === 'string' ? prefs.name : st.name, mode: prefs.mode || 'light', gray: !!prefs.gray, square: !!prefs.square, grid: !!prefs.grid, view: prefs.view === 'crop' ? 'crop' : 'preview' });
+
+  $('#name').value = st.name; syncName();
+  syncSeg('shape', st.shape); $('#ladder').dataset.shape = st.shape;
+  syncSeg('mode', st.mode); $('#stage').dataset.mode = st.mode;
+  syncView();
+  $('#gray').checked = st.gray; $('#stage').classList.toggle('gray', st.gray);
+  $('#square').checked = st.square; syncSquare();
+  $('#grid').checked = st.grid;
+  $('#custom').value = st.custom; syncFill();
+
+  if (savedImg){
+    $('#hint').textContent = 'Drag to reposition. Pinch or scroll to zoom.';
+    loadSrc(savedImg, { fx: prefs?.fx ?? .5, fy: prefs?.fy ?? .5 });
+  } else {
+    loadSrc(sample());
+  }
+})();
+</script>
+</body>
+</html>
