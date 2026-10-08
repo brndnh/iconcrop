@@ -4,10 +4,12 @@
   const out = document.createElement('canvas'); out.width = out.height = 512;
   const octx = out.getContext('2d');
   const MARGIN = 0.08; // editor frame inset, so you can see what's cropped away
-  const KEY_IMG = 'avatar-check:img', KEY_PREFS = 'avatar-check:prefs';
+  // Prefs key is versioned so changed defaults aren't masked by older saved settings
+  const KEY_IMG = 'avatar-check:img', KEY_PREFS = 'avatar-check:prefs:v2';
+  try { localStorage.removeItem('avatar-check:prefs'); } catch(e){}
 
   const st = { img:null, w:0, h:0, z:1, px:0, py:0, shape:'circle', fill:'none', custom:'#2F5BEA',
-               name:'Branden', mode:'light', gray:false, square:false, grid:false, view:'preview' };
+               name:'Username', handle:'username', bio:'Your bio goes here ✨', mode:'dark', gray:false, square:false, grid:false, view:'preview' };
 
   const SIZES = [[16,'Browser tab'],[20,'Mentions'],[24,'Reactions'],[32,'Comments'],
                  [40,'Chat headers'],[48,'Notifications'],[64,'Contact cards'],[96,'Profile header'],[160,'Profile page']];
@@ -100,7 +102,7 @@
       try {
         localStorage.setItem(KEY_PREFS, JSON.stringify({
           z:st.z, fx: st.w ? st.px/st.w : .5, fy: st.h ? st.py/st.h : .5,
-          shape:st.shape, fill:st.fill, custom:st.custom, name:st.name, mode:st.mode, gray:st.gray, square:st.square, grid:st.grid, view:st.view }));
+          shape:st.shape, fill:st.fill, custom:st.custom, name:st.name, handle:st.handle, bio:st.bio, mode:st.mode, gray:st.gray, square:st.square, grid:st.grid, view:st.view }));
       } catch(e){}
     }, 300);
   }
@@ -246,10 +248,29 @@
 
   function syncName(){
     $$('[data-name]').forEach(n => n.textContent = st.name.trim() || 'You');
-    const handle = st.name.toLowerCase().replace(/[^a-z0-9_.]/g, '') || 'you';
+    // A blank handle falls back to one made from the display name
+    const handle = st.handle.replace(/^@+/, '').replace(/\s+/g, '')
+      || st.name.toLowerCase().replace(/[^a-z0-9_.]/g, '') || 'you';
     $$('[data-handle]').forEach(n => n.textContent = handle);
   }
   $('#name').addEventListener('input', e => { st.name = e.target.value; syncName(); savePrefs(); });
+  $('#handle').addEventListener('input', e => { st.handle = e.target.value; syncName(); savePrefs(); });
+
+  function syncBio(){
+    const bio = st.bio.trim();
+    $$('[data-bio]').forEach(n => n.textContent = bio);
+    $$('[data-bio-wrap]').forEach(w => w.hidden = !bio); // e.g. Discord hides "About Me" when empty
+    $('#bioCount').textContent = `${st.bio.length}/150`;
+  }
+  $('#bio').addEventListener('input', e => { st.bio = e.target.value; syncBio(); savePrefs(); });
+
+  // Card tabs (Discord Chat/Profile, X Notifications/Profile): each switches panes inside its own card
+  $('#stage').addEventListener('click', e => {
+    const tab = e.target.closest('.mtabs button'); if (!tab) return;
+    const card = tab.closest('.mock');
+    card.querySelectorAll('.mtabs button').forEach(b => b.setAttribute('aria-selected', b === tab));
+    card.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== tab.dataset.tab);
+  });
 
   $('#mode').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -318,8 +339,9 @@
   }
   function renderHist(){
     const L = $('#hist');
+    // Newest step first; data-i keeps each row tied to its real position in the history
     L.innerHTML = hist.list.map((h, i) =>
-      `<li${i > hist.i ? ' class="future"' : ''}><button type="button" data-i="${i}"${i === hist.i ? ' aria-current="step"' : ''}>${i + 1}. ${h.label}</button></li>`).join('');
+      `<li${i > hist.i ? ' class="future"' : ''}><button type="button" data-i="${i}"${i === hist.i ? ' aria-current="step"' : ''}>${i + 1}. ${h.label}</button></li>`).reverse().join('');
     $('#undo').disabled = hist.i <= 0;
     $('#redo').disabled = hist.i >= hist.list.length - 1;
     const cur = L.querySelector('[aria-current]');
@@ -329,7 +351,7 @@
   $('#undo').addEventListener('click', () => goTo(hist.i - 1));
   $('#redo').addEventListener('click', () => goTo(hist.i + 1));
   window.addEventListener('keydown', e => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target.matches('input[type=text]')) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.target.matches('input[type=text], textarea')) return;
     const k = e.key.toLowerCase();
     if (k === 'z'){ e.preventDefault(); goTo(e.shiftKey ? hist.i + 1 : hist.i - 1); }
     else if (k === 'y'){ e.preventDefault(); goTo(hist.i + 1); }
@@ -355,9 +377,12 @@
   try { prefs = JSON.parse(localStorage.getItem(KEY_PREFS) || 'null'); savedImg = localStorage.getItem(KEY_IMG); } catch(e){}
   if (prefs) Object.assign(st, {
     z: prefs.z || 1, shape: prefs.shape || 'circle', fill: prefs.fill || 'none', custom: prefs.custom || st.custom,
-    name: typeof prefs.name === 'string' ? prefs.name : st.name, mode: prefs.mode || 'light', gray: !!prefs.gray, square: !!prefs.square, grid: !!prefs.grid, view: prefs.view === 'crop' ? 'crop' : 'preview' });
+    name: typeof prefs.name === 'string' ? prefs.name : st.name,
+    handle: typeof prefs.handle === 'string' ? prefs.handle : st.handle,
+    bio: typeof prefs.bio === 'string' ? prefs.bio : st.bio, mode: prefs.mode || 'dark', gray: !!prefs.gray, square: !!prefs.square, grid: !!prefs.grid, view: prefs.view === 'crop' ? 'crop' : 'preview' });
 
-  $('#name').value = st.name; syncName();
+  $('#name').value = st.name; $('#handle').value = st.handle; syncName();
+  $('#bio').value = st.bio; syncBio();
   syncSeg('shape', st.shape); $('#ladder').dataset.shape = st.shape;
   syncSeg('mode', st.mode); $('#stage').dataset.mode = st.mode;
   syncView();
